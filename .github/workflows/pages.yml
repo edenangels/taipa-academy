@@ -1,0 +1,61 @@
+name: Deploy to GitHub Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  # THE GATE. Nothing reaches a learner until this is green.
+  #
+  # Until now this workflow was the only CI, and it only knew how to deploy —
+  # a broken push went straight to academy.edenrise.com. `node --check` was the
+  # whole safety net, and it happily passes a clobbered event handler, a raw
+  # i18n key rendered at the user, a ?v= marker out of step with sw.js, or a
+  # Vimeo id that has been deleted upstream. All four have happened.
+  #
+  # Runs on its own fresh checkout, BEFORE the minify step rewrites files in
+  # place, so it tests the source that is actually committed.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Suite (integrity + units + harness self-test)
+        run: node test/run.mjs
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Minify JS + CSS (deploy artifact only; source stays readable)
+        run: |
+          npx --yes esbuild@0.24.2 brands/edenrise/brand.js --minify --charset=utf8 --outfile=brands/edenrise/brand.js --allow-overwrite
+          npx --yes esbuild@0.24.2 brands/_example/brand.js --minify --charset=utf8 --outfile=brands/_example/brand.js --allow-overwrite
+          npx --yes esbuild@0.24.2 core/brandkit.js --minify --charset=utf8 --outfile=core/brandkit.js --allow-overwrite
+          npx --yes esbuild@0.24.2 core/app.js  --minify --charset=utf8 --outfile=core/app.js  --allow-overwrite
+          npx --yes esbuild@0.24.2 brands/edenrise/content.js --minify --charset=utf8 --outfile=brands/edenrise/content.js --allow-overwrite
+          npx --yes esbuild@0.24.2 data.js --minify --charset=utf8 --outfile=data.js --allow-overwrite
+          npx --yes esbuild@0.24.2 core/auth.js --minify --charset=utf8 --format=esm --outfile=core/auth.js --allow-overwrite
+          npx --yes esbuild@0.24.2 sw.js   --minify --charset=utf8 --outfile=sw.js   --allow-overwrite
+          npx --yes esbuild@0.24.2 core/styles.css --minify --outfile=core/styles.css --allow-overwrite
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4

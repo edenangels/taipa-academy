@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Evidence Verifier — independent learning-record check</title>
+<meta name="robots" content="noindex">
+<style>
+  :root { --bg:#101410; --card:#1a211b; --line:rgba(235,240,232,.14); --text:#f2f4ef; --dim:#b9c2b4; --ok:#8fd0a0; --bad:#e08a76; --accent:#c8a45d; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: Georgia, 'Times New Roman', serif; background: var(--bg); color: var(--text); min-height:100vh; display:grid; place-items:center; padding:32px 16px; }
+  .wrap { width:min(720px,100%); }
+  h1 { font-size:28px; font-weight:600; }
+  .sub { color:var(--dim); font-size:14.5px; line-height:1.6; margin:10px 0 26px; font-family: Helvetica, Arial, sans-serif; }
+  .drop { border:2px dashed var(--line); border-radius:16px; padding:44px 24px; text-align:center; color:var(--dim); cursor:pointer; transition:border-color .2s; font-family:Helvetica,Arial,sans-serif; }
+  .drop:hover, .drop.over { border-color: var(--accent); color: var(--text); }
+  .drop input { display:none; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:24px 26px; margin-top:22px; display:none; }
+  .verdict { font-size:22px; font-weight:600; display:flex; align-items:center; gap:10px; }
+  .verdict.ok { color:var(--ok); } .verdict.bad { color:var(--bad); }
+  .facts { margin-top:16px; font-family:Helvetica,Arial,sans-serif; font-size:13.5px; color:var(--dim); line-height:2; }
+  .facts b { color:var(--text); font-weight:600; }
+  .how { margin-top:28px; font-size:12.5px; color:var(--dim); font-family:Helvetica,Arial,sans-serif; line-height:1.7; border-top:1px solid var(--line); padding-top:16px; }
+  code { background:rgba(255,255,255,.07); padding:1px 6px; border-radius:5px; font-size:11.5px; }
+  .btc { margin-top:18px; padding-top:16px; border-top:1px solid var(--line); font-family:Helvetica,Arial,sans-serif; font-size:13.5px; line-height:1.9; color:var(--dim); }
+  .btc .hd { font-weight:600; color:var(--text); font-size:14px; }
+  .btc.good .hd { color:var(--ok); } .btc.bad .hd { color:var(--bad); }
+  .btc a { color:var(--accent); }
+  .btc .dl { background:none; border:1px solid var(--line); color:var(--dim); border-radius:8px; padding:5px 11px; font-size:12px; cursor:pointer; font-family:inherit; margin-top:6px; }
+  .btc .dl:hover { color:var(--text); border-color:var(--accent); }
+</style>
+<script src="core/ots.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <h1>Evidence Verifier</h1>
+  <p class="sub">Independently verify an exported learning-evidence file. The check runs <b>entirely in your
+  browser</b> — nothing is uploaded, and it does not depend on the platform that issued the file. Each event is
+  hashed (SHA-256) together with the hash of the previous event; if any event was altered, inserted, or removed
+  after the fact, the chain below will break.</p>
+
+  <label class="drop" id="drop">
+    Drop an <b>evidence-*.json</b> file here, or click to choose one
+    <input type="file" id="file" accept="application/json,.json">
+  </label>
+
+  <div class="card" id="result">
+    <div class="verdict" id="verdict"></div>
+    <div class="facts" id="facts"></div>
+    <div class="btc" id="btc" style="display:none"></div>
+  </div>
+
+  <p class="how"><b>How it works:</b> for every event <code>i</code>, the verifier recomputes
+  <code>sha256(JSON(event minus hash))</code> and requires it to equal <code>event.hash</code>, and requires
+  <code>event.prevHash == hash(event i−1)</code> (the first event chains from <code>"genesis"</code>).
+  Any SHA-256 implementation can reproduce this check without this page. Server-side, events are additionally
+  stored append-only (create-only security rules) with server-authoritative timestamps.<br><br>
+  <b>The Bitcoin check:</b> if the file carries an <a href="https://opentimestamps.org" target="_blank" rel="noopener">OpenTimestamps</a>
+  proof, the record's head hash was committed into a Bitcoin block. This page recomputes that block's merkle root
+  from the proof and compares it against the real blockchain (via a public explorer — a convenience, not a trust
+  root: the same check runs against your own node). The <code>.ots</code> file is standard, so
+  <code>ots verify</code> or opentimestamps.org will confirm it without any software of ours.<br><br>
+  <b>What this does and does not prove.</b> It proves the record <i>existed</i> by the time of that block, so it
+  cannot have been back-dated, and that no event was altered since. It does <b>not</b> prove the learning claims
+  inside it are true — only that they are old and unedited.</p>
+</div>
+<script>
+const drop = document.getElementById('drop'), fileIn = document.getElementById('file');
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); if (e.dataTransfer.files[0]) check(e.dataTransfer.files[0]); });
+fileIn.addEventListener('change', () => { if (fileIn.files[0]) check(fileIn.files[0]); });
+
+async function sha(s) {
+  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, '0')).join('');
+}
+async function check(file) {
+  const out = document.getElementById('result'), v = document.getElementById('verdict'), f = document.getElementById('facts');
+  out.style.display = 'block'; v.className = 'verdict'; v.textContent = 'Verifying…'; f.innerHTML = '';
+  let data;
+  try { data = JSON.parse(await file.text()); } catch (e) { v.className = 'verdict bad'; v.textContent = '✕ Not a valid evidence file'; return; }
+  const L = data.events || [];
+  if (!Array.isArray(L) || !L.length) { v.className = 'verdict bad'; v.textContent = '✕ No events in file'; return; }
+  let prev = 'genesis', broken = null;
+  for (let i = 0; i < L.length; i++) {
+    const ev = L[i];
+    const { hash, ...core } = ev;
+    if (ev.prevHash !== prev || await sha(JSON.stringify(core)) !== hash) { broken = i; break; }
+    prev = hash;
+  }
+  const headOk = !broken && (!data.headHash || data.headHash === prev);
+  const types = {};
+  L.forEach(e => { types[e.type] = (types[e.type] || 0) + 1; });
+  if (broken === null && headOk) {
+    v.className = 'verdict ok'; v.textContent = '✓ Chain intact — record is internally consistent';
+  } else {
+    v.className = 'verdict bad';
+    v.textContent = broken !== null ? `✕ Chain BROKEN at event ${broken + 1} of ${L.length} — the record was altered` : '✕ Head hash does not match the chain';
+  }
+  f.innerHTML = `
+    <b>${(data.learner || 'Unknown learner')}</b> · ${(data.platform || 'unknown platform')} · exported ${data.exportedAt ? new Date(data.exportedAt).toLocaleString() : '—'}<br>
+    <b>${L.length}</b> events · first ${new Date(L[0].at).toLocaleDateString()} · last ${new Date(L[L.length - 1].at).toLocaleDateString()}<br>
+    ${Object.entries(types).map(([k, n]) => `${k.replace(/_/g, ' ')}: <b>${n}</b>`).join(' · ')}<br>
+    head hash <code>${(prev || '').slice(0, 20)}…</code>`;
+
+  checkBitcoin(data, L);
+}
+
+/* ---- Bitcoin layer -------------------------------------------------------
+   The hash chain proves internal consistency. It does NOT prove the record
+   wasn't written all at once, yesterday. An OpenTimestamps proof does: the
+   head hash is committed into a Bitcoin block, so the record demonstrably
+   existed by that block's time. We verify by recomputing the block's merkle
+   root from the proof and comparing it with the real chain. -------------- */
+async function checkBitcoin(data, L) {
+  const box = document.getElementById('btc');
+  const stamps = data.timestamps || [];
+  if (!stamps.length) { box.style.display = 'none'; return; }
+  box.style.display = 'block'; box.className = 'btc';
+  box.innerHTML = '<div class="hd">⛓ Checking the Bitcoin proof…</div>';
+
+  const confirmed = stamps.filter(s => s.status === 'confirmed' && s.otsBase64);
+  const pending = stamps.filter(s => s.status !== 'confirmed');
+
+  if (!confirmed.length) {
+    box.innerHTML = '<div class="hd">⏳ Bitcoin proof submitted, not yet confirmed</div>' +
+      '<div>' + pending.length + ' timestamp' + (pending.length > 1 ? 's' : '') + ' waiting for a Bitcoin block (normally 1–2 hours). ' +
+      'Until one confirms, this record\'s dates rest on the issuing platform\'s clock — the chain above still proves nothing was edited.</div>';
+    return;
+  }
+
+  const s = confirmed[confirmed.length - 1];
+  try {
+    const bytes = OTS.unb64 ? OTS.unb64(s.otsBase64) : new Uint8Array(atob(s.otsBase64).split('').map(c => c.charCodeAt(0)));
+    const { digest, tree } = OTS.parseFile(bytes);
+
+    /* the proof must timestamp THIS record's head — not some other file */
+    const headInChain = L.some(e => e.hash === s.head);
+    const digestMatches = OTS.hex(digest) === s.head;
+
+    const info = await OTS.summarize(tree, digest);
+    if (!info.bitcoin.length) throw new Error('proof carries no Bitcoin attestation');
+    const v = await OTS.verifyBitcoin(info.bitcoin[0]);
+
+    const good = v.ok === true && digestMatches && headInChain;
+    box.className = 'btc ' + (good ? 'good' : 'bad');
+    const when = v.time ? new Date(v.time * 1000) : null;
+    box.innerHTML =
+      '<div class="hd">' + (good
+        ? '⛓ Confirmed in Bitcoin block ' + v.height + ' — this record existed by ' + (when ? when.toLocaleDateString() : 'that block') + ', so it was not back-dated'
+        : (v.ok === null ? '⛓ Could not reach a Bitcoin explorer to check the proof'
+          : '✕ The Bitcoin proof does NOT match this record')) + '</div>' +
+      (v.ok !== null ? (
+        '<div>proof covers head <code>' + s.head.slice(0, 16) + '…</code> ' + (headInChain ? '— which is an event in this file ✓' : '— <b>NOT in this file ✗</b>') + '</div>' +
+        '<div>merkle root computed <code>' + String(v.computed).slice(0, 20) + '…</code></div>' +
+        '<div>merkle root on-chain <code>' + String(v.actual).slice(0, 20) + '…</code>' + (v.ok ? ' ✓ identical' : ' ✗ differs') + '</div>' +
+        '<div>block ' + v.height + (when ? ' · ' + when.toLocaleString() : '') + ' · checked via <a href="' + v.source + '/block/' + v.block + '" target="_blank" rel="noopener">' + new URL(v.source).host + '</a></div>' +
+        (s.eventsAtStamp < L.length ? '<div style="margin-top:6px">Note: the proof covers the first <b>' + s.eventsAtStamp + '</b> of ' + L.length + ' events (stamped ' + new Date(s.stampedAt).toLocaleDateString() + '). Later events are covered by the chain, and by the next stamp.</div>' : '')
+      ) : '<div>The proof itself is intact — only the lookup failed. Try again, or verify it with the official OpenTimestamps tools below.</div>') +
+      '<button class="dl" id="dlOts">⤓ Download the .ots proof — verify it without this page</button>';
+
+    document.getElementById('dlOts').onclick = () => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
+      a.download = s.head.slice(0, 12) + '.ots';
+      a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    };
+  } catch (e) {
+    box.className = 'btc bad';
+    box.innerHTML = '<div class="hd">✕ The Bitcoin proof could not be read</div><div>' + e.message + '</div>';
+  }
+}
+</script>
+</body>
+</html>

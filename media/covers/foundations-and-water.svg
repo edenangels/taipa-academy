@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1b130d"/><stop offset="1" stop-color="#2b1c12"/></linearGradient>
+    <radialGradient id="r" cx="70%" cy="35%" r="70%"><stop offset="0" stop-color="#d9893f" stop-opacity=".28"/><stop offset=".6" stop-color="#e6c79a" stop-opacity=".06"/><stop offset="1" stop-color="#1b130d" stop-opacity="0"/></radialGradient>
+    <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="linear" slope=".08"/></feComponentTransfer></filter>
+  </defs>
+  <rect width="1280" height="720" fill="url(#g)"/>
+  <g opacity=".75"><rect x="0" y="170" width="1280" height="71" fill="#5a3d2b" opacity="0.25"/>
+<rect x="0" y="238" width="1280" height="3" fill="#1b130d" opacity=".45"/>
+<rect x="0" y="241" width="1280" height="80" fill="#e6c79a" opacity="0.37"/>
+<rect x="0" y="318" width="1280" height="3" fill="#1b130d" opacity=".45"/>
+<rect x="0" y="321" width="1280" height="67" fill="#b5553a" opacity="0.48"/>
+<rect x="0" y="385" width="1280" height="3" fill="#1b130d" opacity=".45"/>
+<rect x="0" y="388" width="1280" height="60" fill="#d9893f" opacity="0.51"/>
+<rect x="0" y="445" width="1280" height="3" fill="#1b130d" opacity=".45"/>
+<rect x="0" y="448" width="1280" height="84" fill="#c9a77a" opacity="0.36"/>
+<rect x="0" y="529" width="1280" height="3" fill="#1b130d" opacity=".45"/>
+<rect x="0" y="532" width="1280" height="67" fill="#5a3d2b" opacity="0.48"/>
+<rect x="0" y="596" width="1280" height="3" fill="#1b130d" opacity=".45"/>
+<rect x="0" y="599" width="1280" height="65" fill="#d9893f" opacity="0.28"/>
+<rect x="0" y="661" width="1280" height="3" fill="#1b130d" opacity=".45"/>
+<rect x="0" y="664" width="1280" height="75" fill="#c9a77a" opacity="0.31"/>
+<rect x="0" y="736" width="1280" height="3" fill="#1b130d" opacity=".45"/></g>
+  <rect width="1280" height="720" fill="url(#r)"/>
+  <g transform="translate(143,70) scale(0.94)" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M60 220 L330 80 L600 220" stroke="#e6c79a" stroke-width="20"/><rect x="200" y="230" width="260" height="190" stroke="#d9893f" stroke-width="16"/><rect x="170" y="420" width="320" height="70" rx="8" fill="#5a3d2b" stroke="#c9a77a" stroke-width="10"/><path d="M80 300 l-20 60 M640 300 l20 60 M110 380 l-20 60 M610 380 l20 60" stroke="#e6c79a" stroke-width="10" opacity=".7"/></g>
+  <rect width="1280" height="720" filter="url(#grain)" opacity=".5"/>
+  <rect x="0" y="560" width="1280" height="160" fill="url(#g)" opacity=".55"/>
+</svg>

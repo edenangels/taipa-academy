@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "taipa", "runtimeExecutable": "python3", "runtimeArgs": ["-m", "http.server", "4191"], "port": 4191 }
+  ]
+}

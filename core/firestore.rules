@@ -1,0 +1,200 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============ MULTI-TENANT (Phase 5) ============
+    // Platform superadmins (EdenRise) — verified email allowlist.
+    // R3-1c — WHY THE PROVIDER CHECK COMES FIRST.
+    // `token.email` and `token.email_verified` are NOT reserved claims: whoever
+    // mints a token decides what they say. `firebase.sign_in_provider` IS set by
+    // the Auth backend, and a custom token always exchanges to 'custom'. So an
+    // admin check keyed on email alone is only ever as strong as the weakest
+    // thing that can mint a token for this project — and isSuper() also gates the
+    // learner-event reads below, so the blast radius is every learner's evidence.
+    //
+    // It also states the intent plainly: bridged (custom-token) and anonymous
+    // sessions are legitimate LEARNERS and must never be admins.
+    function realIdentity() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider in ['google.com', 'password'];
+    }
+    function isSuper() {
+      return realIdentity()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in [
+          // STAMP: replace with THIS deployment's verified admin emails.
+          // Left empty on purpose — an unstamped instance has no superadmin
+          // rather than another tenant's.
+        ];
+    }
+    // The caller's company, read from their own user doc (cached per request).
+    function myCompany() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.profile.companyId;
+    }
+    // Legacy docs without companyId belong to the founding tenant 'edenrise'.
+    function docCompany(d) {
+      return ('companyId' in d) ? d.companyId : 'edenrise';
+    }
+    function sameCompany(d) {
+      return request.auth != null && docCompany(d) == myCompany();
+    }
+    // Company admin: verified email listed on that company's doc.
+    function isCompanyAdminOf(cid) {
+      return realIdentity()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in get(/databases/$(database)/documents/companies/$(cid)).data.adminEmails;
+    }
+    function isAdminOfDoc(d) { return isSuper() || isCompanyAdminOf(docCompany(d)); }
+
+    // ---- Companies: members read their own company; admins/super write.
+    match /companies/{cid} {
+      allow read: if isSuper() || (request.auth != null && myCompany() == cid);
+      allow create, delete: if isSuper();
+      allow update: if isSuper() || isCompanyAdminOf(cid);
+    }
+    // ---- Invites: code → companyId. Unguessable codes; any signed-in user may resolve one.
+    match /invites/{code} {
+      allow get: if request.auth != null;
+      allow list: if isSuper();
+      allow write: if isSuper() || isCompanyAdminOf(request.resource.data.companyId);
+      allow delete: if isSuper();
+    }
+
+    // ---- Users: own doc; superadmins read all; company admins read their company's people.
+    match /users/{uid} {
+      allow read:  if request.auth != null && (
+                     request.auth.uid == uid
+                     || isSuper()
+                     || isCompanyAdminOf(docCompany(resource.data.profile)) );
+      allow write: if request.auth != null && request.auth.uid == uid;
+
+      // ---- Evidence ledger (server truth): APPEND-ONLY. Learning events are
+      // immutable facts — create is allowed, update/delete NEVER, so the record
+      // is genuinely tamper-evident on the server, not just client-side.
+      match /events/{eventId} {
+        allow create: if request.auth != null && request.auth.uid == uid;
+        allow read:   if request.auth != null && (request.auth.uid == uid || isSuper());
+        allow update, delete: if false;
+      }
+      // ---- Chain anchors: the ledger's head hash pinned to SERVER time.
+      // Back-dating becomes detectable: an anchor's recordedAt is authoritative.
+      match /anchors/{anchorId} {
+        allow create: if request.auth != null && request.auth.uid == uid
+                      && request.resource.data.recordedAt == request.time;
+        allow read:   if request.auth != null && (request.auth.uid == uid || isSuper());
+        allow update, delete: if false;
+      }
+      // ---- Bitcoin proofs (OpenTimestamps). Create-only like everything else
+      // in the evidence path. A proof is SELF-verifying: a forged one simply
+      // fails against the blockchain, so these rules only need to guarantee
+      // that a stored proof is never quietly swapped or removed later.
+      // An upgraded (block-confirmed) proof is written as a NEW doc — never an
+      // update — because immutability here is worth more than tidiness.
+      match /proofs/{proofId} {
+        allow create: if request.auth != null && request.auth.uid == uid;
+        allow read:   if request.auth != null && (request.auth.uid == uid || isSuper());
+        allow update, delete: if false;
+      }
+    }
+
+    // ---- Manager confirmations (R2-18b): "I saw them apply it on the job".
+    // Deliberately a SEPARATE record from the learner's ledger — a learner's
+    // append-only chain must keep exactly one author, so a manager's verdict
+    // lives on the manager's own chain and references the learner's event by
+    // hash. This doc is the shareable cross-reference between the two.
+    // Create-only, and you can never confirm YOURSELF.
+    match /confirmations/{confirmId} {
+      allow create: if request.auth != null
+                    && request.resource.data.byUid == request.auth.uid
+                    && request.resource.data.subjectUid != request.auth.uid
+                    && isAdminOfDoc(request.resource.data)
+                    && request.resource.data.recordedAt == request.time;
+      allow read:   if request.auth != null && (
+                      request.auth.uid == resource.data.subjectUid
+                      || sameCompany(resource.data) || isSuper() );
+      allow update, delete: if false;
+    }
+
+    // ---- Org/tenant config (AI keys etc): same-company read, company-admin write.
+    // 'org' is the legacy edenrise doc; per-tenant docs are keyed by companyId.
+    match /config/{cid} {
+      allow read: if request.auth != null
+                  && (isSuper() || myCompany() == cid || (cid == 'org' && myCompany() == 'edenrise'));
+      allow write: if isSuper() || isCompanyAdminOf(cid == 'org' ? 'edenrise' : cid);
+    }
+
+    // ---- Leaderboard: own row writes. Reads require sign-in (GDPR: learner
+    // names/streaks must not be world-readable; guests see an empty board —
+    // the client already degrades gracefully).
+    match /leaderboard/{uid} {
+      allow read: if request.auth != null
+                  && (isSuper() || docCompany(resource.data) == myCompany());
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ---- Courses: global catalog docs (companyId == null) are public;
+    // tenant-published docs are same-company only. Admin-of-tenant writes.
+    match /courses/{courseId} {
+      // Global catalog (companyId == null) is world-readable AND list-provable
+      // via where('companyId','==',null); tenant courses via the company query.
+      // The missing-field branch keeps legacy single-doc reads working.
+      allow read: if !('companyId' in resource.data)
+                  || resource.data.companyId == null
+                  || isSuper()
+                  || (request.auth != null && docCompany(resource.data) == myCompany());
+      allow create, update, delete: if isSuper()
+                  || isCompanyAdminOf(docCompany(request.resource.data));
+    }
+
+    // ---- Field Missions: same-company; author submits/updates own; company admin reviews.
+    match /missions/{missionId} {
+      // author branch makes listMine (where authorUid==uid) provable — without
+      // it a learner could not read their OWN submitted missions
+      allow read: if request.auth != null && (
+                     resource.data.authorUid == request.auth.uid
+                     || sameCompany(resource.data) || isSuper());
+      allow create: if request.auth != null
+                    && request.resource.data.authorUid == request.auth.uid;
+      allow update: if request.auth != null
+                    && (resource.data.authorUid == request.auth.uid || isAdminOfDoc(resource.data));
+      allow delete: if request.auth != null
+                    && (resource.data.authorUid == request.auth.uid || isAdminOfDoc(resource.data));
+    }
+
+    // ---- Community forum: reads require sign-in (GDPR — author names are
+    // personal data). Posts carry companyId; clients scope queries. Author
+    // edits own; tenant admin moderates.
+    match /forum_posts/{postId} {
+      allow read: if request.auth != null
+                  && (isSuper() || docCompany(resource.data) == myCompany());
+      allow create: if request.auth != null
+                    && request.resource.data.authorUid == request.auth.uid;
+      allow update: if request.auth != null && (
+                       resource.data.authorUid == request.auth.uid
+                       || request.resource.data.diff(resource.data).affectedKeys()
+                            .hasOnly(['likes', 'likedBy', 'replyCount', 'lastActivity', 'reactions', 'poll'])
+                       || (isAdminOfDoc(resource.data) && request.resource.data.diff(resource.data)
+                            .affectedKeys().hasOnly(['pinned']))
+                    );
+      allow delete: if request.auth != null
+                    && (resource.data.authorUid == request.auth.uid || isAdminOfDoc(resource.data));
+
+      match /replies/{replyId} {
+        // auth-only (not company-checked): replies are only discoverable via
+        // their parent post, whose read IS company-scoped above. Accepted
+        // residual: a uid who somehow learns a foreign postId could read its
+        // replies — documented in GDPR-COMPLIANCE.md.
+        allow read: if request.auth != null;
+        allow create: if request.auth != null
+                      && request.resource.data.authorUid == request.auth.uid;
+        allow update: if request.auth != null && (
+                         resource.data.authorUid == request.auth.uid
+                         || request.resource.data.diff(resource.data).affectedKeys()
+                              .hasOnly(['likes', 'likedBy', 'reactions'])
+                      );
+        allow delete: if request.auth != null
+                      && (resource.data.authorUid == request.auth.uid || isSuper());
+      }
+    }
+  }
+}
