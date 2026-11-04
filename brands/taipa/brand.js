@@ -37,6 +37,10 @@
   ogImage: null,
   content: 'brands/taipa/content.js',
   /* the storefront always leads with the welcome course */
+  askExamples: {
+    en: ['How do I test a soil before building?', 'Why do earth walls need a plinth?', 'How thick should a taipa wall be?'],
+    pt: ['Como ensaio um solo antes de construir?', 'Porque precisam as paredes de terra de um embasamento?', 'Que espessura deve ter uma parede de taipa?']
+  },
   heroCourse: 'welcome-taipa',
   fonts: {
     /* self-hosted (GDPR: no visitor IP to a third party) — scripts/selfhost-fonts.py */
