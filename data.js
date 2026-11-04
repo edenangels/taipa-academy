@@ -68,6 +68,14 @@ const GOAL_PRESETS = {
   'Finish Like a Master': ['welcome-taipa', 'earth-as-material', 'earth-plasters']
 };
 
+const GOAL_INFO = {
+  'Build My First Wall':  { icon: 'hands',    en: 'From a handful of soil to a wall that stands.', pt: 'De uma mão-cheia de terra a uma parede de pé.' },
+  'Master the Craft':     { icon: 'mountain', en: 'Every stage of taipa, from soil test to finish.', pt: 'Cada fase da taipa, do ensaio do solo ao acabamento.' },
+  'Design with Earth':    { icon: 'compass',  en: 'Design, cost and license a rammed-earth building.', pt: 'Projetar, orçamentar e licenciar um edifício em taipa.' },
+  'Restore Old Taipa':    { icon: 'tree',     en: 'Read, repair and keep a heritage wall.', pt: 'Ler, reparar e conservar uma parede antiga.' },
+  'Finish Like a Master': { icon: 'sun',      en: 'Earth plasters and finishes that last.', pt: 'Rebocos e acabamentos de terra que duram.' }
+};
+
 const ROLE_OPTIONS = [
   { key: 'selfbuilder', label: 'Self-builder',            icon: 'hands',    goals: ['Build My First Wall', 'Master the Craft'] },
   { key: 'architect',   label: 'Architect or designer',   icon: 'compass',  goals: ['Design with Earth', 'Master the Craft'] },
@@ -269,7 +277,7 @@ const UI = {
     badges_h:'Badges', badges_sub:'', locked_dot:'Locked ·', leaders_board:'Leaderboard · this week', board_sub:'Friendly. Only this week’s points reset on Monday; your progress and your path never do.', keep_alive:'',
     you:'you', xp_ahead_1:'is just', xp_ahead_2:'ahead — about {n} lessons', top_board:"You're top of the board this week. Keep the grove growing.", path_points:'',
     ob_welcome:'Welcome to {brand}', ob_step:'Step', ob_hi:'Welcome,', ob_pick_handle:"Pick a username — it's how others see you in the community.", ob_role_q:'And what do you do?', ob_q1:'What do you do?', ob_q1_sub:'The AI uses your role to seed your first learning path. You can change everything later.', ob_skip:'Skip — explore on my own', ob_continue:'Continue →',
-    ob_destination:'Your destination', ob_q2:'Pick a goal to work toward', ob_q2_sub:'The AI sequences courses toward this goal and re-plans as you prove skills.', ob_build:'Build my path ✦', ob_building:'Building your path to', courses_adaptive:'courses · adaptive', course_adaptive_one:'course · adaptive', courses_ready:'courses ready', course_ready_one:'course ready', track_more:'track',
+    ob_destination:'Your destination', ob_q2:'Pick a goal to work toward', ob_q2_sub:'Your path is built around it.', ob_build:'Build my path ✦', ob_building:'Building your path to', courses_adaptive:'courses · adaptive', course_adaptive_one:'course · adaptive', courses_ready:'courses ready', course_ready_one:'course ready', track_more:'track',
     ai_hello:'How can I help you today?', how_answers:'How it answers',
     tutor_foot_live:'AI · answers can be wrong · grounded in your courses',
     tutor_foot_demo:'Demo · scripted replies · grounded in your courses',
@@ -421,7 +429,7 @@ const UI = {
     badges_h:'Distintivos', badges_sub:'', locked_dot:'Bloqueado ·', leaders_board:'Ranking · esta semana', board_sub:'Amigável. Só os pontos desta semana reiniciam à segunda; o seu progresso e o seu percurso nunca.', keep_alive:'▲ Mantenha viva',
     you:'você', xp_ahead_1:'está apenas', xp_ahead_2:'à sua frente — termine um módulo para alcançar', top_board:'Está no topo do ranking esta semana. Continue a fazer crescer o bosque.', path_points:'',
     ob_welcome:'Bem-vindo à {brand}', ob_step:'Passo', ob_hi:'Bem-vindo,', ob_pick_handle:'Escolha um nome de utilizador — é assim que os outros o veem na comunidade.', ob_role_q:'E o que faz?', ob_q1:'O que faz?', ob_q1_sub:'A IA usa a sua função para criar o seu primeiro percurso. Pode mudar tudo mais tarde.', ob_skip:'Ignorar — explorar sozinho', ob_continue:'Continuar →',
-    ob_destination:'O seu destino', ob_q2:'Escolha um objetivo', ob_q2_sub:'A IA sequencia cursos para este objetivo e replaneia à medida que prova competências.', ob_build:'Criar o meu percurso ✦', ob_building:'A criar o seu percurso para', courses_adaptive:'cursos · adaptativo', course_adaptive_one:'curso · adaptativo', courses_ready:'cursos prontos', course_ready_one:'curso pronto', track_more:'percurso',
+    ob_destination:'O seu destino', ob_q2:'Escolha um objetivo', ob_q2_sub:'O seu percurso é construído à volta dele.', ob_build:'Criar o meu percurso ✦', ob_building:'A criar o seu percurso para', courses_adaptive:'cursos · adaptativo', course_adaptive_one:'curso · adaptativo', courses_ready:'cursos prontos', course_ready_one:'curso pronto', track_more:'percurso',
     ai_hello:'Como posso ajudar hoje?', how_answers:'Como responde',
     tutor_foot_live:'IA · as respostas podem conter erros · baseadas nos seus cursos',
     tutor_foot_demo:'Demo · respostas guionadas · baseadas nos seus cursos',
